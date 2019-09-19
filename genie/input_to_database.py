@@ -13,8 +13,9 @@ from . import process_functions
 from . import validate
 from . import toRetract
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig()
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 '''
 TODO:
@@ -76,12 +77,6 @@ def get_center_input_files(syn, synid, center, process="main"):
 
     for _, _, entities in center_files:
         for name, ent_synid in entities:
-            # This is to remove vcfs from being validated during main
-            # processing. Often there are too many vcf files, and it is
-            # not necessary for them to be run everytime.
-            if name.endswith(".vcf") and process != "vcf":
-                continue
-
             ent = syn.get(ent_synid)
             logger.debug(ent)
 
@@ -563,7 +558,7 @@ def update_status_and_error_tables(syn,
 
 def validation(syn, center, process,
                center_mapping_df, database_synid_mappingdf,
-               thread, testing, oncotree_link):
+               thread, testing, oncotree_link, format_registry=PROCESS_FILES):
     '''
     Validation of all center files
 
@@ -584,6 +579,28 @@ def validation(syn, center, process,
     logger.info("Center: " + center)
     center_files = get_center_input_files(syn, center_input_synid, center,
                                           process)
+
+    # Remove the VCF file type from the list of center files unless explicily
+    # processing them.
+    # This is to remove vcfs from being validated during main
+    # processing. Often there are too many vcf files, and it is
+    # not necessary for them to be run everytime.
+
+    filtered_center_files = []
+    if process != 'vcf':
+        for ents in center_files:
+            print(ents)
+            logger.debug(f"Ents: {[type(ent) for ent in ents]}")
+            filepaths = [ent.path for ent in ents]
+            validator = validate.GenieValidationHelper(syn=syn, center=center,
+                                                       filepathlist=filepaths,
+                                                       format_registry=format_registry,
+                                                       testing=testing)
+            if validator.file_type != 'vcf':
+                filtered_center_files.append(ents)
+    
+    center_files = filtered_center_files
+
 
     # If a center has no files, then return empty list
     if not center_files:
@@ -648,7 +665,7 @@ def center_input_to_database(
         only_validate, vcf2maf_path, vep_path,
         vep_data, database_to_synid_mappingdf,
         center_mapping_df, reference=None,
-        delete_old=False, oncotree_link=None, thread=1):
+        delete_old=False, oncotree_link=None, thread=1, format_registry=PROCESS_FILES):
     if only_validate:
         log_path = os.path.join(
             process_functions.SCRIPT_DIR,
@@ -692,19 +709,16 @@ def center_input_to_database(
     validFiles = validation(
         syn, center, process, center_mapping_df,
         database_to_synid_mappingdf, thread,
-        testing, oncotree_link)
+        testing, oncotree_link, format_registry)
 
     if len(validFiles) > 0 and not only_validate:
         # Reorganize so BED file are always validated and processed first
-        validBED = [
-            os.path.basename(i).endswith('.bed') for i in validFiles['path']]
+        validBED = [file_type == 'bed' for file_type in validFiles['fileType']]
         beds = validFiles[validBED]
         validFiles = beds.append(validFiles)
         validFiles.drop_duplicates(inplace=True)
         # Valid vcf files
-        validVCF = [
-            i for i in validFiles['path']
-            if os.path.basename(i).endswith('.vcf')]
+        validVCF = [file_type == 'vcf' for file_type in validFiles['fileType']]
 
         processTrackerSynId = process_functions.getDatabaseSynId(
             syn, "processTracker",
