@@ -764,9 +764,9 @@ def test_validation():
                               'Id': ['syn222', 'syn333', 'syn444']}
     databaseToSynIdMappingDf = pd.DataFrame(databaseToSynIdMapping)
     entity = synapseclient.Entity(id='syn1234', md5='44444',
-                                  path='/path/to/foobar.txt',
                                   name='data_clinical_supp_SAGE.txt')
-    entities = [entity]
+    entity.path = '/path/to/data_clinical_supp_SAGE.txt'
+    entities = [[entity]]
     filetype = "clinical"
     input_status_list = [
         [entity.id, entity.path, entity.md5,
@@ -796,7 +796,7 @@ def test_validation():
             syn, center_input_synid, center, process)
         assert patch_tablequery.call_count == 2
         patch_validatefile.assert_called_once_with(
-            syn, entity,
+            syn, [entity],
             validationstatus_mock.asDataFrame(),
             errortracking_mock.asDataFrame(),
             center='SAGE', threads=1,
