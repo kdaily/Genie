@@ -10,6 +10,7 @@ import pandas as pd
 
 from .config import PROCESS_FILES
 from . import process_functions
+from . import reporting
 from . import validate
 from . import toRetract
 
@@ -161,34 +162,6 @@ def check_existing_file_status(validation_status_table, error_tracker_table, ent
         'to_validate': to_validate})
 
 
-def _send_validation_error_email(syn, filenames, message, file_users):
-    '''
-    Sends validation error email
-
-    Args:
-        syn: Synapse object
-        filenames: invalid filenames
-        message: error message
-        file_users: List of unique synapse user profiles of
-                    users that created and most recently
-                    modified the file
-    '''
-    # Send email the first time the file is invalid
-    incorrect_files = ", ".join(filenames)
-    usernames = ", ".join([
-        syn.getUserProfile(user)['userName']
-        for user in file_users])
-    email_message = (
-        "Dear {username},\n\n"
-        "Your files ({filenames}) are invalid! "
-        "Here are the reasons why:\n\n{error_message}".format(
-            username=usernames,
-            filenames=incorrect_files,
-            error_message=message))
-    syn.sendMessage(
-        file_users, "GENIE Validation Error", email_message)
-
-
 def _get_status_and_error_list(valid, message, filetype, entities):
     '''
     Helper function to return the status and error list of the
@@ -274,7 +247,8 @@ def validatefile(syn, entities, validation_status_table, error_tracker_table,
             entities)
         # Send email the first time the file is invalid
         if invalid_errors_list is not None:
-            _send_validation_error_email(syn, filenames, message, file_users)
+            reporting.send_validation_error_email(syn, filenames,
+                                                  message, file_users)
     else:
         input_status_list = [
             [ent.id, path, ent.md5, status, filename, entity_date_to_timestamp(ent.properties.modifiedOn), filetype]
@@ -429,31 +403,6 @@ def create_and_archive_maf_database(syn, database_synid_mappingdf):
     return(database_synid_mappingdf)
 
 
-def email_duplication_error(syn, duplicated_filesdf):
-    '''
-    Sends an email if there is a duplication error
-
-    Args:
-        syn: Synapse object
-        duplicated_filesdf: dataframe with 'id', 'name' column
-    '''
-    if not duplicated_filesdf.empty:
-        incorrect_files = [
-            name for synId, name in zip(duplicated_filesdf['id'],
-                                        duplicated_filesdf['name'])]
-        incorrect_filenames = ", ".join(incorrect_files)
-        incorrect_ent = syn.get(duplicated_filesdf['id'].iloc[0])
-        send_to_users = set([incorrect_ent.modifiedBy,
-                             incorrect_ent.createdBy])
-        usernames = ", ".join(
-            [syn.getUserProfile(user)['userName'] for user in send_to_users])
-        error_email = (
-            "Dear {},\n\n"
-            "Your files ({}) are duplicated!  FILES SHOULD BE UPLOADED AS "
-            "NEW VERSIONS AND THE ENTIRE DATASET SHOULD BE "
-            "UPLOADED EVERYTIME".format(usernames, incorrect_filenames))
-        syn.sendMessage(
-            list(send_to_users), "GENIE Validation Error", error_email)
 
 
 def get_duplicated_files(validation_statusdf, duplicated_error_message):
@@ -525,7 +474,7 @@ def update_status_and_error_tables(syn,
                                               duplicated_file_error)
     # Send an email if there are any duplicated files
     if not duplicated_filesdf.empty:
-        email_duplication_error(syn, duplicated_filesdf)
+        reporting.send_email_duplication_error(syn, duplicated_filesdf)
     duplicated_idx = input_valid_statusdf['id'].isin(duplicated_filesdf['id'])
     input_valid_statusdf['status'][duplicated_idx] = "INVALID"
     # Create invalid error synapse table

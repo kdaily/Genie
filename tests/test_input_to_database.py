@@ -11,7 +11,7 @@ from genie.clinical import clinical
 from genie.mafSP import mafSP
 from genie.maf import maf
 from genie.vcf import vcf
-
+import genie.reporting
 
 
 syn = mock.create_autospec(synapseclient.Synapse)
@@ -411,7 +411,7 @@ def test_valid_validatefile():
         mock.patch(
             "genie.input_to_database._get_status_and_error_list",
             return_value=expected_validate_results) as patch_get_staterror_list,\
-        mock.patch("genie.input_to_database._send_validation_error_email") as patch_send_email:
+        mock.patch("genie.reporting.send_validation_error_email") as patch_send_email:
 
         validate_results = input_to_database.validatefile(
             syn, entities, validation_statusdf,
@@ -471,7 +471,7 @@ def test_invalid_validatefile():
         mock.patch(
             "genie.input_to_database._get_status_and_error_list",
             return_value=expected_validate_results) as patch_get_staterror_list,\
-        mock.patch("genie.input_to_database._send_validation_error_email") as patch_send_email:
+        mock.patch("genie.reporting.send_validation_error_email") as patch_send_email:
 
         validate_results = input_to_database.validatefile(
             syn, entities, validation_statusdf,
@@ -538,7 +538,7 @@ def test_already_validated_validatefile():
         mock.patch(
             "genie.input_to_database._get_status_and_error_list",
             return_value=expected_validate_results) as patch_get_staterror_list,\
-        mock.patch("genie.input_to_database._send_validation_error_email") as patch_send_email:
+        mock.patch("genie.reporting.send_validation_error_email") as patch_send_email:
 
         validate_results = input_to_database.validatefile(
             syn, entities, validation_statusdf,
@@ -603,7 +603,7 @@ def test_dups_email_duplication_error():
             return_value={'userName': 'trial'}) as patch_syn_profile,\
         mock.patch.object(
             syn, "sendMessage") as patch_send:
-        input_to_database.email_duplication_error(syn, duplicated_filesdf)
+        genie.reporting.send_email_duplication_error(syn, duplicated_filesdf)
         patch_syn_get.assert_called_once_with('syn1234')
         patch_syn_profile.assert_called_once_with('333')
         patch_send.assert_called_once_with(
@@ -618,7 +618,7 @@ def test_nodups_email_duplication_error():
     with mock.patch.object(syn, "get") as patch_syn_get,\
             mock.patch.object(syn, "getUserProfile") as patch_syn_profile,\
             mock.patch.object(syn, "sendMessage") as patch_send:
-        input_to_database.email_duplication_error(syn, duplicated_filesdf)
+        genie.reporting.send_email_duplication_error(syn, duplicated_filesdf)
         patch_syn_get.assert_not_called()
         patch_syn_profile.assert_not_called()
         patch_send.assert_not_called()
@@ -693,7 +693,7 @@ def test__send_validation_error_email():
         return_value={'userName': 'trial'}) as patch_syn_getuserprofile,\
         mock.patch.object(
             syn, "sendMessage") as patch_syn_sendmessage:
-        input_to_database._send_validation_error_email(
+        genie.reporting.send_validation_error_email(
             syn, filenames, message, file_users)
         error_message = (
             "Dear trial, trial,\n\n"
@@ -741,7 +741,7 @@ def test_update_status_and_error_tables():
             "genie.input_to_database.get_duplicated_files",
             return_value=pd.DataFrame(columns=['id', 'errors', 'name', 'fileType'], dtype=str)) as mock_get_duplicated,\
         mock.patch(
-            "genie.input_to_database.email_duplication_error") as mock_email,\
+            "genie.reporting.send_email_duplication_error") as mock_email,\
         mock.patch(
             "genie.process_functions.updateDatabase") as mock_update:
         input_validdf = input_to_database.update_status_and_error_tables(
